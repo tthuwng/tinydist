@@ -37,6 +37,13 @@ def update_db_with_npz_metadata(file_path, category='default'):
         )
     ''')
     db_connection.commit()
+
+    filename = os.path.basename(file_path)
+    cursor.execute('''
+        INSERT INTO npz_metadata (filename, file_path, upload_timestamp, category)
+        VALUES (?, ?, ?, ?)
+    ''', (filename, file_path, datetime.now(), category))
+    db_connection.commit()
     db_connection.close()
 
 if __name__ == "__main__":
