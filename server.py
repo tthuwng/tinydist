@@ -81,14 +81,9 @@ def stream_file(file_id):
     cursor.execute('SELECT file_path FROM npz_metadata WHERE id = ?', (file_id,))
     record = cursor.fetchone()
     db_connection.close()
-    
-    npz_data = np.load(record[0])
 
-    file_data = {key: npz_data[key].tolist() for key in npz_data.files}
-    npz_data.close()
-
-    if file_data:
-        return file_data
+    if record and os.path.exists(record[0]):
+        return send_file(record[0])
     else:
         return 'File not found', 404
 
