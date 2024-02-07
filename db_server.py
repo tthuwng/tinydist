@@ -72,6 +72,9 @@ def stream_file(file_id):
     except Exception as e:
         return jsonify({"message": str(e)}), 500
 
+@app.route("/")
+def hello():
+    return "<h1'>tinydist db server</h1>"
 
 if __name__ == "__main__":
     app.run(debug=True, port=5002, host="0.0.0.0")

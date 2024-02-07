@@ -2,3 +2,9 @@
 real-metadata.db
 test*
 metadata.db
+
+*.sock
+*.ini
+
+__pycache__/
+tinydist/
