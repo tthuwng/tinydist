@@ -3,5 +3,6 @@ real-metadata.db
 test*
 metadata.db
 .env
+.DS_Store
 
 tinydist/

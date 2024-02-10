@@ -1,37 +1,45 @@
 # tinydist
 
-a distributed system for managing and processing `.npz` training target files across 3 separate services: a Node server, a central processing server, and a db server. It's designed to streamline the handling of files by providing a structured way to upload, list, and access these files and their metadata through a set of RESTful APIs. Goal is to make it ideal for machine learning data pipelines of handling of training targets.
+a distributed system for managing and processing various types of files (including training target and model) into a single flask server. It's designed to streamline the handling of files by providing a structured way to upload, list, and access these files and their metadata through a set of RESTful APIs. Goal is to make it ideal for machine learning data pipelines of handling of training targets.
 
 ### API
 
-Node Server
-
 - POST /upload: Uploads an .npz file. The file is saved in a specified directory, and its metadata is uploaded to the DB server.
 
-Processing Server
+```
+curl -F "file=@path_to_file.any_extension" -F "category=optional_category" -H "Authorization: secret_token" http://host_name:5002/upload
+```
 
-- GET /process: Fetches the top x latest .npz files' metadata from the DB server and processes them. The number x can be specified as a query parameter.
-- GET /file/<int:file_id>: Streams the content of a specific .npz file by its ID from the DB server.
+- GET /metadata/list: Lists metadata for files. Optionally, specify limit for the number of records and category to filter by file category.
 
-DB Server
+```
+curl -G -H "Authorization: secret_token" http://hostname:5002/metadata/list
+```
 
-- POST /metadata/upload: Receives and stores metadata for uploaded .npz files.
-- GET /metadata/list: Returns a list of all .npz files' metadata.
-- GET /file/<int:file_id>: Serves the actual .npz file content based on its database ID.
+- GET /files: Download a single file or multiple files (as a ZIP). Specify file IDs as query parameters.
+
+```
+curl -H "Authorization: secret_token" -o "downloaded_filename.extension" http://hostname:5002/files?id=1?id=2
+```
 
 ### Start Servers (default localhost)
 
 ```
-# this is just nginx under the hood
-python db_server.py # default port 5002
-python node.py # default port 5001
-python server.py # default port 5000
+python app_server.py
 ```
 
-### Usage
+### Environment Configuration & Auth
 
-- Use a tool like curl or Postman to POST an .npz file to the Node server's /upload endpoint.
+Set AUTH_TOKEN in your environment to secure the API endpoints.
+
+.env File Example:
 
 ```
-curl -F "file=@path_to_your_file.npz" http://localhost:5001/upload
+AUTH_TOKEN=secret_token
+```
+
+This server uses a simple token-based authentication method. Include an Authorization header with your requests to authenticate:
+
+```
+-H "Authorization: secret_token"
 ```
