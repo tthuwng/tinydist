@@ -1,9 +1,12 @@
-from flask import Flask, request, jsonify, send_file
+from flask import Flask, request, jsonify, send_file, after_this_request
 import sqlite3
 from datetime import datetime
 import os
 import requests
 import dotenv
+from werkzeug.utils import secure_filename
+import zipfile
+import shutil
 
 app = Flask(__name__)
 dotenv.load_dotenv()
@@ -23,16 +26,16 @@ def upload_file():
     if not check_auth(auth_token):
         return jsonify({"message": "Unauthorized"}), 401
 
-    if "file" not in request.files:
-        return jsonify({"message": "No file part"}), 400
-    file = request.files["file"]
-    if file.filename == "":
-        return jsonify({"message": "No selected file"}), 400
+    file = request.files.get("file")
+    category = request.form.get("category", "default")
 
-    file_path = os.path.join(file_directory, file.filename)
-    file.save(file_path)
-    upload_metadata(file.filename, file_path, "default")
-    return jsonify({"message": "File uploaded successfully", "filename": file.filename})
+    if file and file.filename:
+        filename = secure_filename(file.filename)
+        file_path = os.path.join(file_directory, filename)
+        file.save(file_path)
+        upload_metadata(filename, file_path, category)
+        return jsonify({"message": "File uploaded successfully", "filename": filename})
+    return jsonify({"message": "Invalid file format"}), 400
 
 def upload_metadata(filename, file_path, category):
     """Insert file metadata into the database."""
@@ -56,11 +59,23 @@ def list_metadata():
     if not check_auth(auth_token):
         return jsonify({"message": "Unauthorized"}), 401
 
+    limit = request.args.get("limit", 5, type=int)
+    category = request.args.get("category", None)
+
+    query = "SELECT * FROM metadata"
+    params = []
+    if category:
+        query += " WHERE category = ?"
+        params.append(category)
+    query += " ORDER BY upload_timestamp DESC LIMIT ?"
+    params.append(limit)
+
     with sqlite3.connect(DB_NAME) as conn:
         cursor = conn.cursor()
-        cursor.execute("SELECT * FROM metadata")
+        cursor.execute(query, params)
         records = cursor.fetchall()
     return jsonify(records)
+
 
 @app.route("/files", methods=["GET"])
 def get_files():
@@ -68,24 +83,37 @@ def get_files():
     if not check_auth(auth_token):
         return jsonify({"message": "Unauthorized"}), 401
 
-    file_ids = request.args.getlist("id")  # Expecting IDs in query string as id=1&id=2
-    files = []
+    file_ids = request.args.getlist("id")
+    files_to_download = []
 
     with sqlite3.connect(DB_NAME) as conn:
         cursor = conn.cursor()
         for file_id in file_ids:
             cursor.execute("SELECT file_path FROM metadata WHERE id = ?", (file_id,))
             record = cursor.fetchone()
-            if record:
-                file_path = record[0]
-                if os.path.exists(file_path):
-                    files.append(file_path) 
-                else:
-                    files.append(f"File ID {file_id} not found")
-            else:
-                files.append(f"Metadata for File ID {file_id} not found")
+            if record and os.path.exists(record[0]):
+                files_to_download.append(record[0])
 
-    return jsonify({"files": files})
+    if len(files_to_download) == 1:
+        return send_file(files_to_download[0], as_attachment=True)
+
+    elif files_to_download:
+        zip_path = os.path.join(file_directory, "files.zip")
+
+        @after_this_request
+        def remove_file(response):
+            try:
+                os.remove(zip_path)
+            except Exception as error:
+                app.logger.error("Error removing or closing downloaded file handle", error)
+            return response
+
+        with zipfile.ZipFile(zip_path, 'w') as zipf:
+            for file in files_to_download:
+                zipf.write(file, os.path.basename(file))
+        return send_file(zip_path, as_attachment=True)
+
+    return jsonify({"message": "No files found"}), 404
 
 if __name__ == "__main__":
     app.run(debug=True, port=5002, host="0.0.0.0")
