@@ -2,3 +2,6 @@
 real-metadata.db
 test*
 metadata.db
+.env
+
+tinydist/
