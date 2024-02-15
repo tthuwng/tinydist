@@ -95,10 +95,15 @@ def get_files():
         cursor = conn.cursor()
         for file_id in file_ids:
             cursor.execute("SELECT file_path FROM metadata WHERE id = ?", (file_id,))
-            cursor.execute("UPDATE metadata SET access_count = access_count + 1 WHERE id = ?", (file_id,))
             record = cursor.fetchone()
             if record and os.path.exists(record[0]):
                 files_to_download.append(record[0])
+                
+                cursor.execute("""UPDATE metadata 
+                                  SET access_count = access_count + 1, 
+                                      last_accessed = ?
+                                  WHERE id = ?""", (datetime.now(), file_id))
+                conn.commit()
     
     if len(files_to_download) == 1:
         return send_file(files_to_download[0], as_attachment=True)
@@ -136,8 +141,6 @@ def delete_metadata_only(file_id):
         cursor.execute("DELETE FROM metadata WHERE id = ?", (file_id,))
     return jsonify({"message": "Metadata deleted successfully"})
 
-
-trash_directory = "~/trash/"
 
 @app.route("/file/delete/<int:file_id>", methods=["DELETE"])
 def delete_file_only(file_id):
