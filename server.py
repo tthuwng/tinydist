@@ -7,6 +7,7 @@ import dotenv
 from werkzeug.utils import secure_filename
 import zipfile
 import shutil
+from send2trash import send2trash
 
 app = Flask(__name__)
 dotenv.load_dotenv()
@@ -50,8 +51,12 @@ def upload_metadata(filename, file_path, category):
                             access_count INTEGER DEFAULT 0,
                             category TEXT)""")
         cursor.execute("""INSERT INTO metadata (filename, file_path, upload_timestamp, category)
-                          VALUES (?, ?, ?, ?)""",
-                       (filename, file_path, datetime.now(), category))
+                              VALUES (?, ?, ?, ?)
+                              ON CONFLICT(filename) DO UPDATE SET
+                              file_path=excluded.file_path,
+                              upload_timestamp=excluded.upload_timestamp,
+                              category=excluded.category""",
+                           (filename, file_path, datetime.now(), category))
 
 @app.route("/metadata/list", methods=["GET"])
 def list_metadata():
@@ -90,10 +95,11 @@ def get_files():
         cursor = conn.cursor()
         for file_id in file_ids:
             cursor.execute("SELECT file_path FROM metadata WHERE id = ?", (file_id,))
+            cursor.execute("UPDATE metadata SET access_count = access_count + 1 WHERE id = ?", (file_id,))
             record = cursor.fetchone()
             if record and os.path.exists(record[0]):
                 files_to_download.append(record[0])
-
+    
     if len(files_to_download) == 1:
         return send_file(files_to_download[0], as_attachment=True)
 
@@ -114,6 +120,83 @@ def get_files():
         return send_file(zip_path, as_attachment=True)
 
     return jsonify({"message": "No files found"}), 404
+
+
+@app.route("/metadata/delete/<int:file_id>", methods=["DELETE"])
+def delete_metadata_only(file_id):
+    """
+    Removes metadata from the database but leaves the file intact on disk
+    """
+    auth_token = request.headers.get("Authorization")
+    if not check_auth(auth_token):
+        return jsonify({"message": "Unauthorized"}), 401
+
+    with sqlite3.connect(DB_NAME) as conn:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM metadata WHERE id = ?", (file_id,))
+    return jsonify({"message": "Metadata deleted successfully"})
+
+
+trash_directory = "~/trash/"
+
+@app.route("/file/delete/<int:file_id>", methods=["DELETE"])
+def delete_file_only(file_id):
+    """
+    Instead of permanently deleting the file, move file to a "trash" folder,
+    allowing for recovery or permanent deletion later.
+    """
+    auth_token = request.headers.get("Authorization")
+    if not check_auth(auth_token):
+        return jsonify({"message": "Unauthorized"}), 401
+
+    with sqlite3.connect(DB_NAME) as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT file_path FROM metadata WHERE id = ?", (file_id,))
+        record = cursor.fetchone()
+        if record:
+            send2trash(record[0])
+            return jsonify({"message": "File moved to trash successfully"})
+        else:
+            return jsonify({"message": "File not found"}), 404
+
+@app.route("/files/diffs", methods=["GET"])
+def list_file_diffs():
+    auth_token = request.headers.get("Authorization")
+    if not check_auth(auth_token):
+        return jsonify({"message": "Unauthorized"}), 401
+
+    diffs = {
+        "in_metadata_not_on_disk": [],
+        "on_disk_not_in_metadata": []
+    }
+
+    # Check for files listed in metadata but not present on disk
+    with sqlite3.connect(DB_NAME) as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, filename, file_path FROM metadata")
+        for record in cursor.fetchall():
+            print(record)
+            if not os.path.exists(record[2]):
+                diffs["in_metadata_not_on_disk"].append({
+                    "id": record[0],
+                    "filename": record[1],
+                    "path": record[2]
+                })
+
+    # Check for files present on disk but not listed in metadata
+    # disk here means existing in the files directory
+    metadata_filenames = set([record["filename"] for record in diffs["in_metadata_not_on_disk"]])
+    for filename in os.listdir(file_directory):
+        file_path = os.path.join(file_directory, filename)
+        if os.path.isfile(file_path):
+            cursor.execute("SELECT id FROM metadata WHERE filename = ?", (filename,))
+            if not cursor.fetchone() and filename not in metadata_filenames:
+                diffs["on_disk_not_in_metadata"].append({
+                    "filename": filename,
+                    "path": file_path
+                })
+
+    return jsonify(diffs)
 
 if __name__ == "__main__":
     app.run(debug=True, port=5002, host="0.0.0.0")
