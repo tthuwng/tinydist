@@ -126,80 +126,46 @@ def get_files():
 
     return jsonify({"message": "No files found"}), 404
 
-
-@app.route("/metadata/delete/<int:file_id>", methods=["DELETE"])
-def delete_metadata_only(file_id):
-    """
-    Removes metadata from the database but leaves the file intact on disk
-    """
+@app.route("/delete", methods=["DELETE"])
+def delete_file_and_or_metadata():
     auth_token = request.headers.get("Authorization")
     if not check_auth(auth_token):
         return jsonify({"message": "Unauthorized"}), 401
+    
+    metadata_id = request.args.get('id', type=int)
+    filename = request.args.get('filename', type=str)
+
+    if not metadata_id and not filename:
+        return jsonify({"message": "Missing metadata ID or filename"}), 400
+
+    message_details = []
 
     with sqlite3.connect(DB_NAME) as conn:
         cursor = conn.cursor()
-        cursor.execute("DELETE FROM metadata WHERE id = ?", (file_id,))
-    return jsonify({"message": "Metadata deleted successfully"})
-
-
-@app.route("/file/delete/<int:file_id>", methods=["DELETE"])
-def delete_file_only(file_id):
-    """
-    Instead of permanently deleting the file, move file to a "trash" folder,
-    allowing for recovery or permanent deletion later.
-    """
-    auth_token = request.headers.get("Authorization")
-    if not check_auth(auth_token):
-        return jsonify({"message": "Unauthorized"}), 401
-
-    with sqlite3.connect(DB_NAME) as conn:
-        cursor = conn.cursor()
-        cursor.execute("SELECT file_path FROM metadata WHERE id = ?", (file_id,))
-        record = cursor.fetchone()
-        if record:
-            send2trash(record[0])
-            return jsonify({"message": "File moved to trash successfully"})
-        else:
-            return jsonify({"message": "File not found"}), 404
-
-@app.route("/files/diffs", methods=["GET"])
-def list_file_diffs():
-    auth_token = request.headers.get("Authorization")
-    if not check_auth(auth_token):
-        return jsonify({"message": "Unauthorized"}), 401
-
-    diffs = {
-        "in_metadata_not_on_disk": [],
-        "on_disk_not_in_metadata": []
-    }
-
-    # Check for files listed in metadata but not present on disk
-    with sqlite3.connect(DB_NAME) as conn:
-        cursor = conn.cursor()
-        cursor.execute("SELECT id, filename, file_path FROM metadata")
-        for record in cursor.fetchall():
-            print(record)
-            if not os.path.exists(record[2]):
-                diffs["in_metadata_not_on_disk"].append({
-                    "id": record[0],
-                    "filename": record[1],
-                    "path": record[2]
-                })
-
-    # Check for files present on disk but not listed in metadata
-    # disk here means existing in the files directory
-    metadata_filenames = set([record["filename"] for record in diffs["in_metadata_not_on_disk"]])
-    for filename in os.listdir(file_directory):
-        file_path = os.path.join(file_directory, filename)
-        if os.path.isfile(file_path):
-            cursor.execute("SELECT id FROM metadata WHERE filename = ?", (filename,))
-            if not cursor.fetchone() and filename not in metadata_filenames:
-                diffs["on_disk_not_in_metadata"].append({
-                    "filename": filename,
-                    "path": file_path
-                })
-
-    return jsonify(diffs)
+        
+        if metadata_id:
+            cursor.execute("SELECT filename, file_path FROM metadata WHERE id = ?", (metadata_id,))
+            record = cursor.fetchone()
+            if record:
+                filename, file_path = record
+            else:
+                message_details.append(f"Metadata ID {metadata_id} not found.")
+                return jsonify({"message": "No metadata found. No action taken."})
+            
+        if filename:
+            file_path = os.path.join(file_directory, secure_filename(filename))
+            if os.path.exists(file_path):
+                send2trash(file_path)
+                message_details.append(f"File '{filename}' moved to trash.")
+            else:
+                message_details.append(f"File '{filename}' not found.")
+                
+        if metadata_id or filename:
+            deleted_rows = cursor.execute("DELETE FROM metadata WHERE id = ? OR filename = ?", (metadata_id, filename)).rowcount
+            if deleted_rows > 0:
+                message_details.append("Metadata deleted.")
+                
+    return jsonify({"message": " ".join(message_details) if message_details else "No action taken."})
 
 if __name__ == "__main__":
     app.run(debug=True, port=5002, host="0.0.0.0")
