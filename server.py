@@ -7,6 +7,7 @@ import dotenv
 from werkzeug.utils import secure_filename
 import zipfile
 import shutil
+from send2trash import send2trash
 
 app = Flask(__name__)
 dotenv.load_dotenv()
@@ -50,8 +51,12 @@ def upload_metadata(filename, file_path, category):
                             access_count INTEGER DEFAULT 0,
                             category TEXT)""")
         cursor.execute("""INSERT INTO metadata (filename, file_path, upload_timestamp, category)
-                          VALUES (?, ?, ?, ?)""",
-                       (filename, file_path, datetime.now(), category))
+                              VALUES (?, ?, ?, ?)
+                              ON CONFLICT(filename) DO UPDATE SET
+                              file_path=excluded.file_path,
+                              upload_timestamp=excluded.upload_timestamp,
+                              category=excluded.category""",
+                           (filename, file_path, datetime.now(), category))
 
 @app.route("/metadata/list", methods=["GET"])
 def list_metadata():
@@ -93,7 +98,13 @@ def get_files():
             record = cursor.fetchone()
             if record and os.path.exists(record[0]):
                 files_to_download.append(record[0])
-
+                
+                cursor.execute("""UPDATE metadata 
+                                  SET access_count = access_count + 1, 
+                                      last_accessed = ?
+                                  WHERE id = ?""", (datetime.now(), file_id))
+                conn.commit()
+    
     if len(files_to_download) == 1:
         return send_file(files_to_download[0], as_attachment=True)
 
@@ -114,6 +125,47 @@ def get_files():
         return send_file(zip_path, as_attachment=True)
 
     return jsonify({"message": "No files found"}), 404
+
+@app.route("/delete", methods=["DELETE"])
+def delete_file_and_or_metadata():
+    auth_token = request.headers.get("Authorization")
+    if not check_auth(auth_token):
+        return jsonify({"message": "Unauthorized"}), 401
+    
+    metadata_id = request.args.get('id', type=int)
+    filename = request.args.get('filename', type=str)
+
+    if not metadata_id and not filename:
+        return jsonify({"message": "Missing metadata ID or filename"}), 400
+
+    message_details = []
+
+    with sqlite3.connect(DB_NAME) as conn:
+        cursor = conn.cursor()
+        
+        if metadata_id:
+            cursor.execute("SELECT filename, file_path FROM metadata WHERE id = ?", (metadata_id,))
+            record = cursor.fetchone()
+            if record:
+                filename, file_path = record
+            else:
+                message_details.append(f"Metadata ID {metadata_id} not found.")
+                return jsonify({"message": "No metadata found. No action taken."})
+            
+        if filename:
+            file_path = os.path.join(file_directory, secure_filename(filename))
+            if os.path.exists(file_path):
+                send2trash(file_path)
+                message_details.append(f"File '{filename}' moved to trash.")
+            else:
+                message_details.append(f"File '{filename}' not found.")
+                
+        if metadata_id or filename:
+            deleted_rows = cursor.execute("DELETE FROM metadata WHERE id = ? OR filename = ?", (metadata_id, filename)).rowcount
+            if deleted_rows > 0:
+                message_details.append("Metadata deleted.")
+                
+    return jsonify({"message": " ".join(message_details) if message_details else "No action taken."})
 
 if __name__ == "__main__":
     app.run(debug=True, port=5002, host="0.0.0.0")

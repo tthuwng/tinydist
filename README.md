@@ -22,6 +22,15 @@ curl -G -H "Authorization: secret_token" http://hostname:5002/metadata/list
 curl -H "Authorization: secret_token" -o "downloaded_filename.extension" http://hostname:5002/files?id=1?id=2
 ```
 
+- DELETE /delete: Delete metadata and move the associated file to trash directory. If the file doesn't exist, deletes the metadata. If the metadata doesn't exist but a file with the corresponding name is found, it moves this file to the trash.
+
+```
+curl -X DELETE "http://localhost:5002/delete?id=123" -H "Authorization: secret_token" # by metadata id
+
+curl -X DELETE "http://localhost:5002/delete?filename=example.txt" -H "Authorization: secret_token" # by filename
+
+```
+
 ### Start Servers (default localhost)
 
 ```
