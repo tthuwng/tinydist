@@ -38,6 +38,37 @@ def upload_file():
         return jsonify({"message": "File uploaded successfully", "filename": filename})
     return jsonify({"message": "Invalid file format"}), 400
 
+@app.route("/upload_chunk", methods=["POST"])
+def upload_chunk():
+    auth_token = request.headers.get("Authorization")
+    if not check_auth(auth_token):
+        return jsonify({"message": "Unauthorized"}), 401
+
+    file = request.files.get("file")
+    category = request.form.get("category", "default")
+    filename = request.form.get("filename")
+    chunk_index = request.form.get("chunkIndex", type=int)
+    total_chunks = request.form.get("totalChunks", type=int)
+
+    os.makedirs(file_directory, exist_ok=True)
+
+    chunk_filename = f"{filename}.part{chunk_index}"
+    chunk_path = os.path.join(file_directory, chunk_filename)
+    file.save(chunk_path)
+
+    if chunk_index + 1 == total_chunks:
+        assembled_file_path = os.path.join(file_directory, filename)
+        with open(assembled_file_path, 'wb') as assembled_file:
+            for i in range(total_chunks):
+                part_path = os.path.join(file_directory, f"{filename}.part{i}")
+                with open(part_path, 'rb') as part_file:
+                    assembled_file.write(part_file.read())
+                os.remove(part_path)
+
+        upload_metadata(filename, assembled_file_path, category)
+
+    return jsonify({"message": "Chunk uploaded successfully"})
+
 def upload_metadata(filename, file_path, category):
     """Insert file metadata into the database."""
     with sqlite3.connect(DB_NAME) as conn:
