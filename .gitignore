@@ -1,8 +1,10 @@
-/npz
-real-metadata.db
-test*
+tinydist/__pycache__
+.venv
+venv
+*.egg-info
+files
 metadata.db
 .env
 .DS_Store
-
-tinydist/
+.vscode
+.pytest_cache

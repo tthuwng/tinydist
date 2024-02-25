@@ -1,3 +1,6 @@
 Flask
 python-dotenv
 send2trash
+requests
+click
+pytest
