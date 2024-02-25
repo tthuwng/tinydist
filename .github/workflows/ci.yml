@@ -12,6 +12,13 @@ jobs:
         uses: actions/setup-python@v2
         with:
           python-version: "3.8"
+      - name: Create .env file
+        run: |
+          echo "AUTH_TOKEN=${{ secrets.AUTH_TOKEN }}" > .env
+          echo "SERVER_URL=${{ secrets.SERVER_URL }}" >> .env
+        env:
+          AUTH_TOKEN: ${{ secrets.AUTH_TOKEN }}
+          SERVER_URL: ${{ secrets.SERVER_URL }}
       - name: Install dependencies
         run: |
           pip install -r requirements.txt
@@ -19,3 +26,6 @@ jobs:
       - name: Run tests
         run: |
           pytest
+        env:
+          AUTH_TOKEN: ${{ secrets.AUTH_TOKEN }}
+          SERVER_URL: ${{ secrets.SERVER_URL }}
