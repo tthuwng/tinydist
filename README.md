@@ -2,9 +2,39 @@
 
 a distributed system for managing and processing various types of files (including training target and model) into a single flask server. It's designed to streamline the handling of files by providing a structured way to upload, list, and access these files and their metadata through a set of RESTful APIs. Goal is to make it ideal for machine learning data pipelines of handling of training targets.
 
+## Features
+
+- File upload with optional categorization.
+- Chunked file upload for large files.
+- Listing of uploaded files with metadata.
+- Downloading files by ID or filename.
+- Deletion of files and associated metadata.
+
+## Setup
+
+1. Clone & Install dependencies:
+
+```
+pip install -r requirements.txt
+pip install -e .
+```
+
+2. Set environment variables (optionally, use a `.env` file with `python-dotenv`):
+
+- `AUTH_TOKEN`: A token for simple API authentication.
+- `SERVER_URL`: The URL where the server is accessible (for testing or production).
+
+3. Run the server:
+
+```
+make server
+
+make test # run all tests
+```
+
 ### API
 
-- POST /upload: Uploads an .npz file. The file is saved in a specified directory, and its metadata is uploaded to the DB server.
+- POST /upload: Uploads file, saved in a specified directory, its metadata is created.
 
 ```
 curl -F "file=@path_to_file.any_extension" -F "category=optional_category" -H "Authorization: secret_token" http://host_name:5002/upload
@@ -31,12 +61,6 @@ curl -X DELETE "http://localhost:5002/delete?filename=example.txt" -H "Authoriza
 
 ```
 
-### Start Servers (default localhost)
-
-```
-python app_server.py
-```
-
 ### Environment Configuration & Auth
 
 Set AUTH_TOKEN in your environment to secure the API endpoints.
@@ -52,3 +76,7 @@ This server uses a simple token-based authentication method. Include an Authoriz
 ```
 -H "Authorization: secret_token"
 ```
+
+## Contributing
+
+Contributions to tinydist are welcome! Please consider forking the repository, making your changes, and submitting a pull request.
