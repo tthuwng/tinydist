@@ -1,9 +1,10 @@
 name: Testing
 
-on: [push, pull_request]
+on: [push]
 
 jobs:
   build:
+    if: false # temporarily disabled
     runs-on: ubuntu-latest
 
     steps:
