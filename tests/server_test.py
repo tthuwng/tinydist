@@ -11,7 +11,7 @@ AUTH_TOKEN = os.getenv("AUTH_TOKEN")
 
 def test_list_metadata(client):
     """Test the metadata listing endpoint."""
-    response = client.get("/metadata/list", headers={"Authorization": AUTH_TOKEN})
+    response = client.get("/metadata", headers={"Authorization": AUTH_TOKEN})
     assert response.status_code == 200
     data = json.loads(response.data.decode("utf-8"))
     assert isinstance(data, list)

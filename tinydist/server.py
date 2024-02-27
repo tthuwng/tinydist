@@ -8,12 +8,11 @@ from flask import Flask, Response, jsonify, request, send_file, stream_with_cont
 from send2trash import send2trash
 from werkzeug.utils import secure_filename
 
-from tinydist.utils import generate_file_stream, get_path_sync
+from tinydist.utils import file_directory, generate_file_stream, get_path_sync
 
 app = Flask(__name__)
 dotenv.load_dotenv()
 
-file_directory = "files/"
 
 DB_NAME = os.getenv("DATABASE_NAME", "metadata.db")
 
@@ -49,6 +48,19 @@ def ensure_directory_exists(path):
         os.makedirs(path)
 
 
+def cleanup_failed_upload(filename, chunks_dir_path):
+    """
+    Deletes all chunks and temporary files associated with a failed upload.
+    """
+    chunks_path = os.path.join(chunks_dir_path, filename)
+    try:
+        if os.path.exists(chunks_path):
+            shutil.rmtree(chunks_path)
+        print(f"Cleanup successful for {filename}")
+    except Exception as e:
+        print(f"Failed to cleanup {filename}: {e}")
+
+
 @app.route("/upload_chunk", methods=["POST"])
 def upload_chunk():
     auth_token = request.headers.get("Authorization")
@@ -58,7 +70,9 @@ def upload_chunk():
     file = request.files.get("file")
     filename = request.form.get("filename")
     chunk_index = request.form.get("chunkIndex", type=int)
+    total_chunks = request.form.get("totalChunks", type=int)
     category = request.form.get("category", "default")
+    checksum = request.form.get("checksum")
 
     filename = os.path.basename(filename)
     chunks_dir_path = os.path.join(file_directory, filename + "_chunks")
@@ -67,13 +81,13 @@ def upload_chunk():
     chunk_filename = f"{filename}.part{chunk_index}"
     chunk_path = os.path.join(chunks_dir_path, chunk_filename)
     file.save(chunk_path)
-
-    upload_metadata(filename, chunks_dir_path, category)
+    if chunk_index == total_chunks - 1:
+        upload_metadata(filename, chunks_dir_path, category, checksum)
 
     return jsonify({"message": f"Chunk {chunk_index} uploaded successfully"})
 
 
-def upload_metadata(filename, path, category):
+def upload_metadata(filename, path, category, checksum=None):
     """Insert file metadata into the database."""
     with sqlite3.connect(DB_NAME) as conn:
         cursor = conn.cursor()
@@ -82,23 +96,26 @@ def upload_metadata(filename, path, category):
                             id INTEGER PRIMARY KEY AUTOINCREMENT,
                             filename TEXT UNIQUE,
                             path TEXT,
+                            checksum TEXT,
                             upload_timestamp DATETIME,
                             last_accessed DATETIME,
                             access_count INTEGER DEFAULT 0,
                             category TEXT)"""
         )
         cursor.execute(
-            """INSERT INTO metadata (filename, path, upload_timestamp, category)
-                              VALUES (?, ?, ?, ?)
+            """INSERT INTO metadata \
+                (filename, path, upload_timestamp, category, checksum)
+                              VALUES (?, ?, ?, ?, ?)
                               ON CONFLICT(filename) DO UPDATE SET
                               path=excluded.path,
                               upload_timestamp=excluded.upload_timestamp,
-                              category=excluded.category""",
-            (filename, path, datetime.now(), category),
+                              category=excluded.category,
+                              checksum=excluded.checksum""",
+            (filename, path, datetime.now(), category, checksum),
         )
 
 
-@app.route("/metadata/list", methods=["GET"])
+@app.route("/metadata", methods=["GET"])
 def list_metadata():
     auth_token = request.headers.get("Authorization")
     if not check_auth(auth_token):
@@ -120,6 +137,24 @@ def list_metadata():
         cursor.execute(query, params)
         records = cursor.fetchall()
     return jsonify(records)
+
+
+@app.route("/verify_get", methods=["POST"])
+def verify_upload():
+    filename = request.form.get("filename")
+    actual_checksum = request.form.get("checksum")
+    with sqlite3.connect(DB_NAME) as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT checksum FROM metadata WHERE filename = ?", (filename,))
+        record = cursor.fetchone()
+        print("record", record)
+        if not record:
+            return jsonify({"message": "File not found"}), 404
+        expected_checksum = record[0]
+    if actual_checksum == expected_checksum:
+        return jsonify({"message": "File is intact"}), 200
+    else:
+        return jsonify({"message": "File corrupted during transfer"}), 400
 
 
 @app.route("/get", methods=["GET"])

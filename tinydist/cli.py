@@ -7,7 +7,7 @@ import dotenv
 import requests
 from tqdm import tqdm
 
-from tinydist.utils import CHUNK_SIZE
+from tinydist.utils import CHUNK_SIZE, calculate_checksum
 
 dotenv.load_dotenv()
 
@@ -26,7 +26,9 @@ def chunk_file(file_path, chunk_size=CHUNK_SIZE):
             chunk = f.read(chunk_size)
 
 
-def upload_file_chunk(file_path, filename, total_chunks, chunk_index, category):
+def upload_file_chunk(
+    file_path, filename, total_chunks, chunk_index, category, checksum=None
+):
     """
     Uploads a single chunk of a file to the server.
     """
@@ -37,6 +39,8 @@ def upload_file_chunk(file_path, filename, total_chunks, chunk_index, category):
         "chunkIndex": chunk_index,
         "totalChunks": total_chunks,
         "category": category,
+        "totalChunks": total_chunks,
+        "checksum": checksum,
     }
     with open(file_path, "rb") as f:
         files = {"file": (filename, f, "application/octet-stream")}
@@ -66,7 +70,14 @@ def upload_file(file_path, category):
                 chunk_path = f"{file_path}.part{i}"
                 with open(chunk_path, "wb") as temp_chunk_file:
                     temp_chunk_file.write(chunk)
-                upload_file_chunk(chunk_path, filename, total_chunks, i, category)
+                upload_file_chunk(
+                    chunk_path,
+                    filename,
+                    total_chunks,
+                    i,
+                    category,
+                    checksum=calculate_checksum(file_path),
+                )
                 pbar.update()
                 os.remove(chunk_path)  # Clean up the temporary chunk file
     click.echo(f"{filename} uploaded successfully.")
@@ -144,6 +155,7 @@ def get(file_ids):
                         total_chunks += 1
                         bar.update(len(chunk))
                 assemble_chunks(file_name, total_chunks, temp_dir)
+
         else:
             with open(file_name, "wb") as f_out, tqdm(
                 desc=f"Downloading {file_name}",
@@ -154,6 +166,16 @@ def get(file_ids):
                 for chunk in response.iter_content(chunk_size=8192):
                     f_out.write(chunk)
                     bar.update(len(chunk))
+        assembled_checksum = calculate_checksum(file_name)
+        response = requests.post(
+            f"{SERVER_URL}verify_get?filename={file_name}",
+            headers={"Authorization": f"Bearer {AUTH_TOKEN}"},
+            data={"filename": file_name, "checksum": assembled_checksum},
+        )
+        if response.status_code == 200:
+            print(f"File downloaded and verified successfully: {file_name}")
+        else:
+            print(f"File download failed: {file_name}")
 
 
 if __name__ == "__main__":

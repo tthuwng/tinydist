@@ -1,4 +1,5 @@
 import asyncio
+import hashlib
 import os
 from concurrent.futures import ThreadPoolExecutor
 
@@ -7,6 +8,7 @@ import aiosqlite
 # TODO: Consider use more sustainable way to handle async
 CHUNK_SIZE = 5 * 1024 * 1024
 DB_NAME = "metadata.db"
+file_directory = "files/"
 
 
 def get_path_sync(identifier, is_id):
@@ -41,3 +43,15 @@ def generate_file_stream(path):
         with open(path, "rb") as file:
             while chunk := file.read(CHUNK_SIZE):
                 yield chunk
+
+
+def verify_checksum(file_path, expected_checksum):
+    return calculate_checksum(file_path) == expected_checksum
+
+
+def calculate_checksum(file_path):
+    sha256_hash = hashlib.sha256()
+    with open(file_path, "rb") as f:
+        for byte_block in iter(lambda: f.read(4096), b""):
+            sha256_hash.update(byte_block)
+    return sha256_hash.hexdigest()

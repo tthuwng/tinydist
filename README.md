@@ -40,10 +40,10 @@ make test # run all tests
 curl -F "file=@path_to_file.any_extension" -F "category=optional_category" -H "Authorization: secret_token" http://host_name:5002/upload
 ```
 
-- GET /metadata/list: Lists metadata for files. Optionally, specify limit for the number of records and category to filter by file category.
+- GET /metadata: Lists metadata for files. Optionally, specify limit for the number of records and category to filter by file category.
 
 ```
-curl -G -H "Authorization: secret_token" http://hostname:5002/metadata/list
+curl -G -H "Authorization: secret_token" http://hostname:5002/metadata
 ```
 
 - GET /files: Download a single file or multiple files (as a ZIP). Specify file IDs as query parameters.
