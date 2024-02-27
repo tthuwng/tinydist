@@ -1,4 +1,4 @@
-tinydist/__pycache__
+__pycache__
 .venv
 venv
 *.egg-info

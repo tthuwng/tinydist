@@ -4,3 +4,6 @@ send2trash
 requests
 click
 pytest
+black
+isort
+ruff

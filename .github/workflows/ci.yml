@@ -1,16 +1,15 @@
-name: Testing
+name: test
 
 on: [push]
 
 jobs:
   build:
-    if: false # temporarily disabled
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - name: Set up Python
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v3
         with:
           python-version: "3.8"
       - name: Create .env file
@@ -22,11 +21,17 @@ jobs:
           SERVER_URL: ${{ secrets.SERVER_URL }}
       - name: Install dependencies
         run: |
+          python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install -e .
+      - name: Start Server
+        run: |
+          make server &
+          sleep 5
       - name: Run tests
         run: |
-          pytest
+          make test
         env:
           AUTH_TOKEN: ${{ secrets.AUTH_TOKEN }}
           SERVER_URL: ${{ secrets.SERVER_URL }}
+          DATABASE_NAME: test_database.db

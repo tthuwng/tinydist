@@ -3,30 +3,10 @@ import json
 import os
 
 import dotenv
-import pytest
-
-from tinydist.server import app
 
 dotenv.load_dotenv()
 
 AUTH_TOKEN = os.getenv("AUTH_TOKEN")
-
-
-@pytest.fixture(scope="session", autouse=True)
-def setup_files_directory():
-    os.makedirs("./files", exist_ok=True)
-
-
-@pytest.fixture
-def client():
-    app.config.update(
-        {
-            "TESTING": True,
-        }
-    )
-
-    with app.test_client() as client:
-        yield client
 
 
 def test_list_metadata(client):

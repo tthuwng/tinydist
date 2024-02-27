@@ -14,7 +14,8 @@ app = Flask(__name__)
 dotenv.load_dotenv()
 
 file_directory = "files/"
-DB_NAME = "metadata.db"
+
+DB_NAME = os.getenv("DATABASE_NAME", "metadata.db")
 
 AUTH_TOKEN = os.getenv("AUTH_TOKEN")
 

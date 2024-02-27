@@ -13,10 +13,10 @@ test:
 	@pytest
 
 sort:
-	@isort .
+	@isort --profile black --check .
 
 lint:
 	@echo "Running linter..."
-	@flake8 .
-	@isort . --check-only
+	@black --preview .
+	#isort --profile black --check .
 
