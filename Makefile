@@ -17,6 +17,6 @@ sort:
 
 lint:
 	@echo "Running linter..."
-	@black --preview .
-	#isort --profile black --check .
+	@black --check --preview .
+	@isort --profile black --check .
 

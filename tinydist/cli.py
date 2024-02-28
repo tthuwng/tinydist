@@ -39,7 +39,6 @@ def upload_file_chunk(
         "chunkIndex": chunk_index,
         "totalChunks": total_chunks,
         "category": category,
-        "totalChunks": total_chunks,
         "checksum": checksum,
     }
     with open(file_path, "rb") as f:
@@ -90,7 +89,7 @@ def cli():
 
 
 @cli.command()
-@click.option("--category", default="default", help="Category for the uploaded files.")
+@click.option("--category", default="default", help="Category for files.")
 @click.argument("paths", nargs=-1, type=click.Path(exists=True))
 def upload(paths, category):
     """Upload a file or all files in a folder."""

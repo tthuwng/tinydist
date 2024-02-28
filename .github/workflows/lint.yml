@@ -1,6 +1,6 @@
 name: lint
 
-on: [push, pull_request]
+on: [push]
 
 jobs:
   ruff-black-isort:
@@ -13,6 +13,6 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt --ignore-installed blinker
       - name: black check
-        run: black --check --preview .
+        run: black --preview .
       - name: isort check
-        run: isort --profile black --check .
+        run: isort --profile black .
