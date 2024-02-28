@@ -19,6 +19,7 @@ def client():
                             id INTEGER PRIMARY KEY AUTOINCREMENT,
                             filename TEXT UNIQUE,
                             path TEXT,
+                            checksum TEXT,
                             upload_timestamp DATETIME,
                             last_accessed DATETIME,
                             access_count INTEGER DEFAULT 0,
